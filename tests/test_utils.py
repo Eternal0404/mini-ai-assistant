@@ -63,7 +63,7 @@ class TestUtils(unittest.TestCase):
             reminders = {'reminders': [{'message': 'Past reminder', 'time': '10:05', 'scheduled_at': '2023-01-01T10:05:00'}]}
             save_data('reminders.json', reminders)
             check_reminders()
-            mock_print.assert_called_with('Reminder: Past reminder')
+            mock_print.assert_called_with('[REMINDER] Past reminder')
 
 if __name__ == '__main__':
     unittest.main()

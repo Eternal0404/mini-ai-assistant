@@ -4,24 +4,47 @@ import ast
 import datetime
 import threading
 import logging
+from typing import Dict, List, Union, Optional, Any
+from functools import lru_cache
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 DATA_DIR = 'data'
 
-def ensure_data_dir():
+def ensure_data_dir() -> None:
     """Ensure the data directory exists."""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
 
-def save_data(file_path: str, data: dict) -> None:
+@lru_cache(maxsize=10)
+def load_data(file_path: str) -> Dict[str, Any]:
+    """
+    Load data from a JSON file with caching.
+
+    Args:
+        file_path (str): Path to the JSON file.
+
+    Returns:
+        Dict[str, Any]: Loaded data, or empty dict if file missing or corrupted.
+    """
+    full_path = os.path.join(DATA_DIR, file_path)
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        logging.info(f"Data loaded from {full_path}")
+        return data
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logging.warning(f"Failed to load data from {full_path}: {e}. Returning empty dict.")
+        return {}
+
+def save_data(file_path: str, data: Dict[str, Any]) -> None:
     """
     Save data to a JSON file.
 
     Args:
         file_path (str): Path to the JSON file.
-        data (dict): Data to save.
+        data (Dict[str, Any]): Data to save.
 
     Raises:
         IOError: If writing to file fails.
@@ -29,32 +52,13 @@ def save_data(file_path: str, data: dict) -> None:
     ensure_data_dir()
     full_path = os.path.join(DATA_DIR, file_path)
     try:
-        with open(full_path, 'w') as f:
-            json.dump(data, f, indent=4)
+        with open(full_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
         logging.info(f"Data saved to {full_path}")
+        load_data.cache_clear()  # Invalidate cache
     except IOError as e:
         logging.error(f"Failed to save data to {full_path}: {e}")
         raise
-
-def load_data(file_path: str) -> dict:
-    """
-    Load data from a JSON file.
-
-    Args:
-        file_path (str): Path to the JSON file.
-
-    Returns:
-        dict: Loaded data, or empty dict if file missing or corrupted.
-    """
-    full_path = os.path.join(DATA_DIR, file_path)
-    try:
-        with open(full_path, 'r') as f:
-            data = json.load(f)
-        logging.info(f"Data loaded from {full_path}")
-        return data
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        logging.warning(f"Failed to load data from {full_path}: {e}. Returning empty dict.")
-        return {}
 
 def add_note(note: str) -> None:
     """
@@ -69,12 +73,12 @@ def add_note(note: str) -> None:
     notes['notes'].append(note)
     save_data('notes.json', notes)
 
-def list_notes() -> list[str]:
+def list_notes() -> List[str]:
     """
     List all notes.
 
     Returns:
-        list[str]: List of notes.
+        List[str]: List of notes.
     """
     notes = load_data('notes.json')
     return notes.get('notes', [])
@@ -97,14 +101,19 @@ def schedule_reminder(message: str, time_str: str) -> None:
         if reminder_time < now:
             reminder_time += datetime.timedelta(days=1)  # Next day if time passed
         delay = (reminder_time - now).total_seconds()
-        
+
         reminders = load_data('reminders.json')
         if 'reminders' not in reminders:
             reminders['reminders'] = []
-        reminders['reminders'].append({'message': message, 'time': time_str, 'scheduled_at': reminder_time.isoformat()})
+        reminders['reminders'].append({
+            'message': message,
+            'time': time_str,
+            'scheduled_at': reminder_time.isoformat(),
+            'id': len(reminders['reminders']) + 1
+        })
         save_data('reminders.json', reminders)
-        
-        threading.Timer(delay, lambda: print(f"Reminder: {message}")).start()
+
+        threading.Timer(delay, lambda: print(f"[REMINDER] {message}")).start()
         logging.info(f"Reminder scheduled for {time_str}: {message}")
     except ValueError as e:
         logging.error(f"Invalid time format {time_str}: {e}")
@@ -122,14 +131,14 @@ def check_reminders() -> None:
     for rem in reminders['reminders']:
         rem_time = datetime.datetime.fromisoformat(rem['scheduled_at'])
         if rem_time <= now:
-            print(f"Reminder: {rem['message']}")
+            print(f"[REMINDER] {rem['message']}")
             logging.info(f"Reminder triggered: {rem['message']}")
         else:
             updated_reminders.append(rem)
     reminders['reminders'] = updated_reminders
     save_data('reminders.json', reminders)
 
-def safe_calc(expression: str) -> float | str:
+def safe_calc(expression: str) -> Union[float, str]:
     """
     Safely evaluate a mathematical expression.
 
@@ -137,7 +146,7 @@ def safe_calc(expression: str) -> float | str:
         expression (str): The expression to evaluate.
 
     Returns:
-        float | str: Result or error message.
+        Union[float, str]: Result or error message.
     """
     try:
         # Use eval with restricted environment for basic math
