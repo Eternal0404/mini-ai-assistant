@@ -28,7 +28,7 @@ class TestAIModule(unittest.TestCase):
         self.assertIn('[OFFLINE]', answer)
         self.assertIn('Hello', answer)
 
-    @unittest.skipUnless(__import__('assistant.ai_module').OPENAI_AVAILABLE, "OpenAI not available")
+    @unittest.skipUnless(__import__('assistant.ai_module', fromlist=['OPENAI_AVAILABLE']).OPENAI_AVAILABLE, "OpenAI not available")
     def test_get_answer_online_success(self):
         # Mock the availability
         import assistant.ai_module as ai_mod
